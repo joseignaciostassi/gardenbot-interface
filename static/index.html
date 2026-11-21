@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GardenBot — Riego</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12160f; --panel:#181f14; --panel-alt:#1e2718; --line:#333d2b;
+    --text:#eceee2; --muted:#98a28a; --muted-dim:#6d7663;
+    --green:#82c06a; --green-dim:#23301c;
+    --blue:#5b9bd6; --blue-dim:#1c2733;
+    --amber:#e2983f; --amber-dim:#332615;
+    --red:#d9705a; --red-dim:#35201b;
+    --sans:'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  [hidden]{display:none !important;}
+  body{background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px;
+       line-height:1.5; padding:24px; -webkit-font-smoothing:antialiased;}
+  .app{max-width:1180px; margin:0 auto;}
+
+  header.top{display:flex; justify-content:space-between; align-items:flex-end; gap:12px;
+             padding-bottom:18px; margin-bottom:20px; border-bottom:1px solid var(--line);}
+  header.top h1{font-size:20px; font-weight:600; letter-spacing:-0.01em;}
+  header.top .sub{color:var(--muted); font-size:13px; margin-top:4px;}
+  .conn{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--muted-dim); flex-shrink:0;}
+  .conn.ok .dot{background:var(--green); box-shadow:0 0 0 3px var(--green-dim);}
+  .conn.err .dot{background:var(--red); box-shadow:0 0 0 3px var(--red-dim);}
+
+  .dashboard{display:grid; grid-template-columns:1.25fr 1fr; gap:16px;
+             grid-template-areas:"cam result" "log today";}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:18px; min-width:0;}
+  .panel h2{font-size:13px; font-weight:500; color:var(--muted); margin-bottom:14px;}
+  .panel-head{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px;}
+  .panel-head h2{margin:0;}
+
+  /* cámara */
+  #cam{grid-area:cam;}
+  .viewer{position:relative; background:var(--panel-alt); border:1px solid var(--line);
+          border-radius:6px; aspect-ratio:4/3; overflow:hidden; display:flex;
+          align-items:center; justify-content:center;}
+  .viewer video, .viewer img{width:100%; height:100%; object-fit:cover; display:block;}
+  .viewer img{position:absolute; inset:0;}
+  .viewer .msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+               text-align:center; padding:24px; color:var(--muted); font-size:13px;}
+  .viewer .badge{position:absolute; top:10px; left:10px; font-family:var(--mono); font-size:11px;
+                 background:rgba(18,22,15,.75); color:var(--muted); padding:3px 8px; border-radius:4px;}
+  .actions{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  button, .btn{font-family:var(--sans); font-size:13px; font-weight:500; border-radius:4px;
+               padding:9px 16px; cursor:pointer; border:1px solid var(--line);
+               background:var(--panel-alt); color:var(--text);}
+  button:hover:not(:disabled), .btn:hover{border-color:var(--muted-dim);}
+  button.primary{background:var(--green); border-color:var(--green); color:#12160f;}
+  button.primary:hover:not(:disabled){filter:brightness(1.08);}
+  button:disabled{opacity:.5; cursor:default;}
+  button:focus-visible, .btn:focus-within, select:focus-visible{outline:2px solid var(--blue); outline-offset:2px;}
+  .btn input{display:none;}
+  select{font-family:var(--mono); font-size:12px; background:var(--panel-alt); color:var(--muted);
+         border:1px solid var(--line); border-radius:4px; padding:4px 6px; max-width:220px;}
+
+  /* resultado */
+  #result{grid-area:result; display:flex; flex-direction:column;}
+  .empty{color:var(--muted-dim); font-size:13px; margin:auto 0; text-align:center; padding:30px 0;}
+  .species-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
+  .species-name{font-size:22px; font-weight:600;}
+  .pill{font-family:var(--mono); font-size:12px; border-radius:20px; padding:3px 10px;
+        color:var(--green); background:var(--green-dim);}
+  .pill.low{color:var(--amber); background:var(--amber-dim);}
+  .dose{background:var(--panel-alt); border:1px solid var(--line); border-radius:6px;
+        padding:16px; margin-bottom:18px;}
+  .dose .k{font-size:12px; color:var(--muted);}
+  .dose .ml{font-family:var(--mono); font-size:40px; font-weight:500; line-height:1.1; margin:4px 0 10px;}
+  .dose .ml small{font-size:16px; color:var(--muted);}
+  .tag{display:inline-block; font-size:12px; font-weight:500; padding:4px 10px; border-radius:4px;}
+  .tag.water{background:var(--blue-dim); color:var(--blue);}
+  .tag.skip{background:var(--bg); color:var(--muted);}
+  .tag.warn{background:var(--amber-dim); color:var(--amber);}
+  .top-list{display:flex; flex-direction:column; gap:9px;}
+  .top-item{display:grid; grid-template-columns:130px 1fr 52px; gap:10px; align-items:center; font-size:12.5px;}
+  .top-item .n{color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .top-item .track{height:6px; background:var(--panel-alt); border-radius:3px; overflow:hidden;}
+  .top-item .fill{height:100%; background:var(--green);}
+  .top-item:not(:first-child) .fill{background:var(--muted-dim);}
+  .top-item .p{font-family:var(--mono); font-size:11px; color:var(--muted-dim); text-align:right;}
+  .meta{font-family:var(--mono); font-size:11px; color:var(--muted-dim); margin-top:auto; padding-top:16px;}
+
+  /* log */
+  #log{grid-area:log;}
+  .log-list{display:flex; flex-direction:column; max-height:280px; overflow-y:auto;}
+  .log-item{display:grid; grid-template-columns:64px 1fr auto; gap:10px; align-items:center;
+            padding:9px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
+  .log-item:last-child{border-bottom:none;}
+  .log-time{font-family:var(--mono); color:var(--muted-dim); font-size:11px;}
+  .log-desc .sp{color:var(--muted); font-family:var(--mono); font-size:11px; margin-left:6px;}
+  .log-item .tag{font-size:11px; padding:3px 8px; white-space:nowrap;}
+
+  /* hoy */
+  #today{grid-area:today;}
+  .big{font-family:var(--mono); font-size:34px; font-weight:500;}
+  .big small{font-size:15px; color:var(--muted);}
+  .today-sub{color:var(--muted); font-size:12.5px; margin-bottom:18px;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{display:flex; gap:8px; background:var(--panel-alt); border:1px solid var(--line);
+        border-radius:4px; padding:6px 10px; font-size:12px;}
+  .chip .r{font-family:var(--mono); color:var(--muted);}
+  .note{font-size:12px; color:var(--muted-dim); margin-top:12px;}
+  .note code{font-family:var(--mono);}
+
+  .error{color:var(--red); font-size:12.5px; margin-top:10px; min-height:1em;}
+
+  @media (max-width:860px){
+    body{padding:16px;}
+    .dashboard{grid-template-columns:1fr; grid-template-areas:"cam" "result" "today" "log";}
+    header.top{flex-direction:column; align-items:flex-start;}
+    .top-item{grid-template-columns:100px 1fr 48px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>GardenBot</h1>
+      <div class="sub">Panel de riego · reconocimiento por cámara · v1</div>
+    </div>
+    <div class="conn" id="conn"><span class="dot"></span><span id="connText">Conectando…</span></div>
+  </header>
+
+  <div class="dashboard">
+    <section class="panel" id="cam">
+      <div class="panel-head">
+        <h2>Cámara</h2>
+        <select id="camSelect" aria-label="Elegir cámara" hidden></select>
+      </div>
+      <div class="viewer">
+        <video id="video" autoplay playsinline muted></video>
+        <img id="snapshot" alt="Imagen analizada" hidden>
+        <div class="msg" id="camMsg">Iniciando cámara…</div>
+        <span class="badge" id="badge" hidden>EN VIVO</span>
+      </div>
+      <div class="actions">
+        <button class="primary" id="analyzeBtn" disabled>Analizar planta</button>
+        <label class="btn">Subir foto<input type="file" id="fileInput" accept="image/*"></label>
+        <button id="liveBtn" hidden>Volver a la cámara</button>
+      </div>
+      <div class="error" id="err" role="alert"></div>
+    </section>
+
+    <section class="panel" id="result" aria-live="polite">
+      <h2>Resultado</h2>
+      <div class="empty" id="resultEmpty">Apuntá la cámara a una planta y presioná <b>Analizar planta</b>.</div>
+      <div id="resultBody" hidden>
+        <div class="species-row">
+          <span class="species-name" id="rSpecies">—</span>
+          <span class="pill" id="rConf" hidden></span>
+        </div>
+        <div class="dose">
+          <div class="k">Agua a suministrar</div>
+          <div class="ml"><span id="rMl">0</span> <small>ml</small></div>
+          <span class="tag" id="rDecision"></span>
+        </div>
+        <div class="top-list" id="rTop"></div>
+        <div class="meta" id="rMeta"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="log">
+      <h2>Actividad reciente</h2>
+      <div class="log-list" id="logList"><div class="empty">Sin análisis todavía.</div></div>
+    </section>
+
+    <section class="panel" id="today">
+      <h2>Agua recomendada hoy</h2>
+      <div class="big"><span id="todayMl">0</span> <small>ml</small></div>
+      <div class="today-sub" id="todaySub">0 análisis hoy</div>
+      <h2>Dosis por especie</h2>
+      <div class="chips" id="chips"></div>
+      <div class="note">Valores estimados por planta y por riego. Se editan en <code>species.json</code>.</div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $('video'), snapshot = $('snapshot');
+let stream = null, speciesNames = {};
+
+const fmtTime = iso => {
+  const d = new Date(iso), today = new Date().toDateString() === d.toDateString();
+  const t = d.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit', hour12:false});
+  return today ? t : d.toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit'}) + ' ' + t;
+};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tagClass = (ml, decision) => ml > 0 ? 'water' : (decision.startsWith('Confianza') ? 'warn' : 'skip');
+
+function setConn(ok, text){
+  $('conn').className = 'conn ' + (ok ? 'ok' : 'err');
+  $('connText').textContent = text;
+}
+
+// ── cámara ────────────────────────────────────────────────────────────────
+async function startCamera(deviceId){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: deviceId ? {deviceId:{exact:deviceId}} : {width:{ideal:1280}, height:{ideal:720}},
+      audio: false
+    });
+    video.srcObject = stream;
+    $('camMsg').hidden = true;
+    $('badge').hidden = false;
+    $('analyzeBtn').disabled = false;
+    await listCameras();
+  } catch (e) {
+    $('camMsg').hidden = false;
+    $('camMsg').textContent = 'No se pudo abrir la cámara (' + e.name + '). Revisá el permiso del navegador o usá "Subir foto".';
+    $('analyzeBtn').disabled = true;
+  }
+}
+
+async function listCameras(){
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+  const sel = $('camSelect');
+  sel.hidden = cams.length < 2;
+  const current = stream?.getVideoTracks()[0]?.getSettings().deviceId;
+  sel.innerHTML = cams.map((c, i) =>
+    `<option value="${esc(c.deviceId)}" ${c.deviceId === current ? 'selected' : ''}>${esc(c.label || 'Cámara ' + (i + 1))}</option>`
+  ).join('');
+}
+$('camSelect').onchange = e => startCamera(e.target.value);
+
+function showLive(){
+  snapshot.hidden = true;
+  $('liveBtn').hidden = true;
+  $('badge').hidden = !stream;
+}
+$('liveBtn').onclick = showLive;
+
+function showSnapshot(url){
+  snapshot.src = url;
+  snapshot.hidden = false;
+  $('badge').hidden = true;
+  $('camMsg').hidden = true;
+  $('liveBtn').hidden = !stream;
+}
+
+// ── análisis ──────────────────────────────────────────────────────────────
+$('analyzeBtn').onclick = () => {
+  const c = document.createElement('canvas');
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext('2d').drawImage(video, 0, 0);
+  c.toBlob(blob => { showSnapshot(URL.createObjectURL(blob)); analyze(blob); }, 'image/jpeg', 0.92);
+};
+
+$('fileInput').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  showSnapshot(URL.createObjectURL(f));
+  analyze(f);
+  e.target.value = '';
+};
+
+async function analyze(blob){
+  const btn = $('analyzeBtn');
+  btn.disabled = true; btn.textContent = 'Analizando…'; $('err').textContent = '';
+  try {
+    const fd = new FormData(); fd.append('image', blob, 'captura.jpg');
+    const r = await fetch('/api/analyze', {method:'POST', body:fd});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    renderResult(data);
+    loadHistory();
+  } catch (e) {
+    $('err').textContent = 'Error al analizar: ' + e.message;
+  } finally {
+    btn.textContent = 'Analizar planta';
+    btn.disabled = !stream;
+  }
+}
+
+function renderResult(d){
+  $('resultEmpty').hidden = true;
+  $('resultBody').hidden = false;
+  $('rSpecies').textContent = d.species_es || 'Sin vegetal visible';
+  const conf = $('rConf');
+  conf.hidden = d.confidence == null;
+  if (d.confidence != null) {
+    conf.textContent = Math.round(d.confidence * 100) + '% confianza';
+    conf.className = 'pill' + (d.decision.startsWith('Confianza') ? ' low' : '');
+  }
+  $('rMl').textContent = d.water_ml;
+  const tag = $('rDecision');
+  tag.textContent = d.decision;
+  tag.className = 'tag ' + tagClass(d.water_ml, d.decision);
+  $('rTop').innerHTML = d.top3.map(t => `
+    <div class="top-item">
+      <span class="n">${esc(speciesNames[t.species] || t.species)}</span>
+      <div class="track"><div class="fill" style="width:${(t.confidence * 100).toFixed(1)}%"></div></div>
+      <span class="p">${(t.confidence * 100).toFixed(1)}%</span>
+    </div>`).join('');
+  $('rMeta').textContent = `score detector ${d.detector_score.toFixed(2)} · ${fmtTime(d.timestamp)}`;
+}
+
+// ── historial y config ────────────────────────────────────────────────────
+async function loadHistory(){
+  const r = await fetch('/api/history');
+  const h = await r.json();
+  $('todayMl').textContent = Math.round(h.today_ml * 10) / 10;
+  $('todaySub').textContent = `${h.today_count} análisis hoy`;
+  $('logList').innerHTML = h.items.length ? h.items.map(i => {
+    const ml = Number(i.water_ml);
+    return `<div class="log-item">
+      <span class="log-time">${esc(fmtTime(i.timestamp))}</span>
+      <span class="log-desc">${esc(i.species_es || 'Sin vegetal')}${i.confidence ? `<span class="sp">${Math.round(i.confidence * 100)}%</span>` : ''}</span>
+      <span class="tag ${tagClass(ml, i.decision)}">${ml > 0 ? ml + ' ml' : esc(i.decision)}</span>
+    </div>`;
+  }).join('') : '<div class="empty">Sin análisis todavía.</div>';
+}
+
+async function loadSpecies(){
+  const cfg = await (await fetch('/api/species')).json();
+  speciesNames = Object.fromEntries(Object.entries(cfg.species).map(([k, v]) => [k, v.nombre]));
+  $('chips').innerHTML = Object.values(cfg.species).map(s =>
+    `<div class="chip"><span>${esc(s.nombre)}</span><span class="r">${s.dose_ml} ml</span></div>`).join('');
+}
+
+(async () => {
+  try {
+    await Promise.all([loadSpecies(), loadHistory()]);
+    setConn(true, 'Modelo listo');
+  } catch {
+    setConn(false, 'Servidor no disponible');
+  }
+  if (navigator.mediaDevices?.getUserMedia) startCamera();
+  else $('camMsg').textContent = 'Este navegador no permite usar la cámara. Usá "Subir foto".';
+})();
+</script>
+</body>
+</html>

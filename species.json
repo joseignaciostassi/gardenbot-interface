@@ -1,0 +1,11 @@
+{
+  "_nota": "dose_ml = agua por planta y por riego. Son ESTIMACIONES iniciales para pruebas: ajustalas según maceta/cantero, etapa del cultivo y clima.",
+  "min_confidence": 0.60,
+  "species": {
+    "carrot":   { "nombre": "Zanahoria",          "dose_ml": 100 },
+    "onion":    { "nombre": "Cebolla",            "dose_ml": 80 },
+    "pepper":   { "nombre": "Morrón / pimiento",  "dose_ml": 200 },
+    "potato":   { "nombre": "Papa",               "dose_ml": 250 },
+    "zucchini": { "nombre": "Zapallito / zucchini", "dose_ml": 300 }
+  }
+}
