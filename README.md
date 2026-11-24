@@ -36,14 +36,23 @@ Para cortar el servidor: `Ctrl+C`.
 1. El detector (MobileNetV3 ImageNet) decide si hay un vegetal. Si no → 0 ml.
 2. El clasificador elige la especie: zanahoria, cebolla, morrón, papa o zapallito.
 3. Si la confianza es menor a `min_confidence` (60 %) → 0 ml, "Confianza baja".
-4. Si no → `dose_ml` de esa especie en **`species.json`** (valores estimados: editalos;
-   se aplican al próximo análisis sin reiniciar).
+4. Se lee la humedad volumétrica del suelo (VWC %). **Por ahora es simulada**: un número
+   aleatorio entre 15 y 35 (`simulated_sensor` en `species.json`). El sensor real irá en
+   `read_soil_moisture()` de `app.py`.
+5. Se compara con el rango óptimo de la especie (`vwc_min`–`vwc_max` en **`species.json`**):
+   - bajo el mínimo → se riega hasta el centro del rango:
+     `ml = (centro − lectura) / 100 × soil_volume_ml` (2000 ml de suelo por planta).
+     Ej.: cebolla 24–30 %, lectura 18 % → (27 − 18) % × 2000 = 180 ml.
+   - dentro del rango o por encima → 0 ml.
+
+Los cambios en `species.json` se aplican al próximo análisis sin reiniciar.
 
 Cada análisis se guarda en `data/historial.csv`.
 
 ## API (para el rover, a futuro)
 
 - `POST /api/analyze` (multipart, campo `image`) → JSON con `species`, `confidence`,
+  `vwc` (humedad leída), `vwc_simulated`, `vwc_min`, `vwc_max`, `vwc_target`,
   `water_ml`, `decision`, `top3`, `timestamp`. El campo `water_ml` es el que va a la bomba.
 - `GET /api/history` → últimos 20 análisis y total de ml de hoy.
 - `GET /api/species` → contenido de `species.json`.

@@ -80,6 +80,19 @@
   .tag.water{background:var(--blue-dim); color:var(--blue);}
   .tag.skip{background:var(--bg); color:var(--muted);}
   .tag.warn{background:var(--amber-dim); color:var(--amber);}
+  .moist{margin-bottom:18px;}
+  .moist-head{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 10px;
+              font-size:12.5px; color:var(--muted); margin-bottom:8px;}
+  .moist-head b{font-family:var(--mono); font-weight:500; color:var(--text);}
+  .sim{font-family:var(--mono); font-size:10px; color:var(--amber); background:var(--amber-dim);
+       padding:1px 6px; border-radius:3px; margin-left:6px; vertical-align:1px;}
+  .range-track{position:relative; height:8px; background:var(--panel-alt); border-radius:4px; margin-bottom:6px;}
+  .range-target{position:absolute; top:0; bottom:0; background:var(--green-dim);
+                border:1px solid var(--green); border-radius:4px;}
+  .range-marker{position:absolute; top:-4px; width:3px; height:16px; margin-left:-1px;
+                background:var(--blue); border-radius:1px;}
+  .range-labels{display:flex; justify-content:space-between; font-family:var(--mono);
+                font-size:11px; color:var(--muted-dim);}
   .top-list{display:flex; flex-direction:column; gap:9px;}
   .top-item{display:grid; grid-template-columns:130px 1fr 52px; gap:10px; align-items:center; font-size:12.5px;}
   .top-item .n{color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -159,6 +172,17 @@
           <span class="species-name" id="rSpecies">—</span>
           <span class="pill" id="rConf" hidden></span>
         </div>
+        <div class="moist" id="rMoist" hidden>
+          <div class="moist-head">
+            <span>Humedad de suelo<span class="sim" id="rSim" hidden>simulado</span></span>
+            <span>medida <b id="rVwc">—</b> · objetivo <b id="rRange">—</b></span>
+          </div>
+          <div class="range-track">
+            <div class="range-target" id="rBand"></div>
+            <div class="range-marker" id="rMarker"></div>
+          </div>
+          <div class="range-labels"><span>10%</span><span>20%</span><span>30%</span><span>40%</span></div>
+        </div>
         <div class="dose">
           <div class="k">Agua a suministrar</div>
           <div class="ml"><span id="rMl">0</span> <small>ml</small></div>
@@ -178,9 +202,11 @@
       <h2>Agua recomendada hoy</h2>
       <div class="big"><span id="todayMl">0</span> <small>ml</small></div>
       <div class="today-sub" id="todaySub">0 análisis hoy</div>
-      <h2>Dosis por especie</h2>
+      <h2>Humedad óptima del suelo por especie</h2>
       <div class="chips" id="chips"></div>
-      <div class="note">Valores estimados por planta y por riego. Se editan en <code>species.json</code>.</div>
+      <div class="note">Si la humedad medida está bajo el mínimo, se riega hasta el centro del rango
+        sobre <span id="volNote">2 L</span> de suelo por planta. Se edita en <code>species.json</code>.
+        <span id="simNote">La lectura del sensor es <b>simulada</b> (aleatoria entre 15 y 35 %).</span></div>
     </section>
   </div>
 </div>
@@ -293,6 +319,17 @@ function renderResult(d){
     conf.textContent = Math.round(d.confidence * 100) + '% confianza';
     conf.className = 'pill' + (d.decision.startsWith('Confianza') ? ' low' : '');
   }
+  const hasVwc = d.vwc != null && d.vwc_min != null;
+  $('rMoist').hidden = !hasVwc;
+  if (hasVwc) {
+    const pos = v => Math.min(100, Math.max(0, (v - 10) / 30 * 100));
+    $('rVwc').textContent = d.vwc.toFixed(1) + '%';
+    $('rRange').textContent = `${d.vwc_min}–${d.vwc_max}%`;
+    $('rSim').hidden = !d.vwc_simulated;
+    $('rBand').style.left = pos(d.vwc_min) + '%';
+    $('rBand').style.width = (pos(d.vwc_max) - pos(d.vwc_min)) + '%';
+    $('rMarker').style.left = pos(d.vwc) + '%';
+  }
   $('rMl').textContent = d.water_ml;
   const tag = $('rDecision');
   tag.textContent = d.decision;
@@ -316,8 +353,10 @@ async function loadHistory(){
     const ml = Number(i.water_ml);
     return `<div class="log-item">
       <span class="log-time">${esc(fmtTime(i.timestamp))}</span>
-      <span class="log-desc">${esc(i.species_es || 'Sin vegetal')}${i.confidence ? `<span class="sp">${Math.round(i.confidence * 100)}%</span>` : ''}</span>
-      <span class="tag ${tagClass(ml, i.decision)}">${ml > 0 ? ml + ' ml' : esc(i.decision)}</span>
+      <span class="log-desc">${esc(i.species_es || 'Sin vegetal')}${i.vwc ? `<span class="sp">humedad ${Number(i.vwc).toFixed(1)}%</span>` : ''}</span>
+      <span class="tag ${tagClass(ml, i.decision)}">${ml > 0 ? ml + ' ml'
+        : i.decision.startsWith('Confianza') ? 'Confianza baja'
+        : i.decision === 'Sin vegetal' ? 'Sin vegetal' : 'Sin riego'}</span>
     </div>`;
   }).join('') : '<div class="empty">Sin análisis todavía.</div>';
 }
@@ -326,7 +365,9 @@ async function loadSpecies(){
   const cfg = await (await fetch('/api/species')).json();
   speciesNames = Object.fromEntries(Object.entries(cfg.species).map(([k, v]) => [k, v.nombre]));
   $('chips').innerHTML = Object.values(cfg.species).map(s =>
-    `<div class="chip"><span>${esc(s.nombre)}</span><span class="r">${s.dose_ml} ml</span></div>`).join('');
+    `<div class="chip"><span>${esc(s.nombre)}</span><span class="r">${s.vwc_min}–${s.vwc_max}%</span></div>`).join('');
+  $('volNote').textContent = cfg.soil_volume_ml / 1000 + ' L';
+  $('simNote').hidden = !cfg.simulated_sensor?.enabled;
 }
 
 (async () => {

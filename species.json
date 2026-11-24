@@ -1,11 +1,13 @@
 {
-  "_nota": "dose_ml = agua por planta y por riego. Son ESTIMACIONES iniciales para pruebas: ajustalas según maceta/cantero, etapa del cultivo y clima.",
+  "_nota": "vwc_min/vwc_max = rango óptimo de humedad volumétrica del suelo (%). Si la lectura está bajo el mínimo se riega hasta el centro del rango: ml = (centro - lectura) / 100 * soil_volume_ml.",
   "min_confidence": 0.60,
+  "soil_volume_ml": 2000,
+  "simulated_sensor": { "enabled": true, "min": 15, "max": 35 },
   "species": {
-    "carrot":   { "nombre": "Zanahoria",          "dose_ml": 100 },
-    "onion":    { "nombre": "Cebolla",            "dose_ml": 80 },
-    "pepper":   { "nombre": "Morrón / pimiento",  "dose_ml": 200 },
-    "potato":   { "nombre": "Papa",               "dose_ml": 250 },
-    "zucchini": { "nombre": "Zapallito / zucchini", "dose_ml": 300 }
+    "carrot":   { "nombre": "Zanahoria",            "vwc_min": 22, "vwc_max": 28 },
+    "onion":    { "nombre": "Cebolla",              "vwc_min": 24, "vwc_max": 30 },
+    "pepper":   { "nombre": "Morrón / pimiento",    "vwc_min": 22, "vwc_max": 28 },
+    "potato":   { "nombre": "Papa",                 "vwc_min": 24, "vwc_max": 30 },
+    "zucchini": { "nombre": "Zapallito / zucchini", "vwc_min": 20, "vwc_max": 27 }
   }
 }
